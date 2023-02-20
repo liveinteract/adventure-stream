@@ -24,4 +24,14 @@ gdown https://drive.google.com/uc?id=12BtinAcMUNA-do11QobmZ_tDQ7Qxv9Kk -O shape_
 cd ..
 python run.py
 ```
-## Test
+## face swap Test
+
+1. select face swap type
+2. select source face image
+3. select target face image
+4. click "Predict" button
+
+![image](https://user-images.githubusercontent.com/54097108/220100939-0f435b1e-6a26-4328-a980-9b4151b97324.png)
+
+![image](https://user-images.githubusercontent.com/54097108/220101714-3453886a-4a99-41fd-bd47-d640281d4db4.png)
+
