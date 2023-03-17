@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import Table, Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy.dialects.postgresql import BYTEA
 from sqlalchemy.ext.declarative import declared_attr, declarative_base
 from sqlalchemy.orm import relationship
 
@@ -60,6 +61,7 @@ class SampleFaces(Base):
     )
 
     vectors = relationship('FeatureVectors', backref='face')
+    imgdatas = relationship('FaceImages', backref='faceimg')
 
 
 class FeatureVectors(Base):
@@ -75,5 +77,21 @@ class FeatureVectors(Base):
 
     vector = Column(
         Text(),
+        nullable=False
+    )
+
+class FaceImages(Base):
+
+    #registered sample face images
+
+    __tablename__ = 'face_images'
+
+    face_id = Column(
+        Integer,
+        ForeignKey('sample_faces.id', ondelete='CASCADE')
+    )
+
+    imgdata = Column(
+        BYTEA(),
         nullable=False
     )

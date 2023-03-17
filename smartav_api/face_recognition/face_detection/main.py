@@ -16,7 +16,8 @@ from .load_image import load_image
 from .models import (
     Base,
     SampleFaces,
-    FeatureVectors
+    FeatureVectors,
+    FaceImages
 )
 from .common import (
     get_env,
@@ -277,6 +278,13 @@ def feature_extraction_thread(face_list, extract_success_list, extract_failure_l
     extract_success_list += success_face_features
     extract_failure_list += failure_face_features
 
+def get_boximg(baseimg, box):
+    x1 = max(0,int(box[0]))
+    y1 = max(0,int(box[1]))
+    x2 = int(box[2])
+    y2 = int(box[3])
+    img = baseimg[y1:y2,x1:x2]
+    return img
 
 def extract_sample_feature_vector(data_list):
     """
@@ -287,6 +295,8 @@ def extract_sample_feature_vector(data_list):
     extract_success_list = []
     extract_failure_list = []
     thread_pool = []
+    box_map = {}
+    img_map = {}
 
     # Main loop, each element will contain one image and its metadata
     for data in data_list:
@@ -311,11 +321,8 @@ def extract_sample_feature_vector(data_list):
 
         # # Get face region from the base image(profile image)
         bbox = face['bbox']
-        x1 = int(bbox[0])
-        y1 = int(bbox[1])
-        x2 = int(bbox[2])
-        y2 = int(bbox[3])
-        face_img = base_img[y1:y2,x1:x2]
+        face_img = get_boximg(base_img, bbox)
+        box_map[sample_id] = { 'box':bbox, 'bimg':base_img }
 
         face_list.append({
             'id': sample_id,
@@ -340,6 +347,21 @@ def extract_sample_feature_vector(data_list):
     # Wait until all threads are finished
     for th in thread_pool:
         th.join()
+        #append sample face image
+    for face in extract_success_list:
+        # If could not find meta data of this face, move it to failed list
+        if face['id'] not in box_map:
+            continue
+        # Add binary image data
+        box = box_map[face['id']]['box']
+        img = get_boximg( box_map[face['id']]['bimg'],box)
+        rgbimg = img[:, :, ::-1]
+        face_pil_img = im.fromarray(rgbimg)
+        face_pil_img = face_pil_img.resize((100,100))
+        byte_io = io.BytesIO()
+        face_pil_img.save(byte_io, 'png')
+        byte_io.seek(0)
+        face['imgdata'] = byte_io.getvalue()
 
     return EXTRACT_SAMPLE_VECTOR_OK, extract_success_list, extract_failure_list
 
@@ -364,6 +386,9 @@ def save_sample_database(sample_vectors):
         metadata = vector_data['metadata']
         action = vector_data['action']
         vector = vector_data['vector']
+        faceimg = vector_data['imgdata']
+
+        db_session.query(SampleFaces).filter_by(sample_id=sample_id).delete()
 
         if db_session.query(SampleFaces).filter_by(sample_id=sample_id).count() > 0:
             # Append a new feature vector to existing face
@@ -371,6 +396,11 @@ def save_sample_database(sample_vectors):
             face.vectors.append(
                 FeatureVectors(
                     vector=json.dumps(vector.tolist())
+                )
+            )
+            face.imgdatas.append(
+                FaceImages(
+                    imgdata=faceimg
                 )
             )
 
@@ -385,6 +415,11 @@ def save_sample_database(sample_vectors):
             new_face.vectors.append(
                 FeatureVectors(
                     vector=json.dumps(vector.tolist())
+                )
+            )
+            new_face.imgdatas.append(
+                FaceImages(
+                    imgdata=faceimg
                 )
             )
             db_session.add(new_face)
@@ -452,6 +487,9 @@ def clear_sample_database():
         # Delete all vectors
         db_session.query(FeatureVectors).delete()
 
+        # Delete all images
+        db_session.query(FaceImages).delete()
+
         db_session.commit()
         db_session.close()
 
@@ -462,7 +500,7 @@ def clear_sample_database():
     return True
 
 
-def register_unknown_face(face_vector):
+def register_unknown_face(base_img, face_vector, bbox):
     """
     This function will register a face_vector as an unknown person's face into database.
     """
@@ -480,8 +518,7 @@ def register_unknown_face(face_vector):
 
         # Prepare fields
         ## Check the already registered unknown faces
-        unknown_faces = db_session.query(SampleFaces).filter(SampleFaces.sample_id.ilike('unknown_person_'))
-
+        unknown_faces = db_session.query(SampleFaces).filter(SampleFaces.sample_id.ilike('unknown_person_%'))
         ## Calculate the suffix_id for unknown face
         suffix_id = 0
         for uf in unknown_faces:
@@ -499,7 +536,22 @@ def register_unknown_face(face_vector):
         name = sample_id
         metadata = sample_id
         action = 'embedlink'
-
+        box = bbox.split(",")
+        # get face image
+        x1 = int(box[0])
+        y1 = int(box[1])
+        w = int(box[2])
+        h = int(box[3])
+        x2 = x1 + w
+        y2 = y1 + h
+        face_img = base_img[y1:y2,x1:x2]
+        rgbimg = face_img[:, :, ::-1]
+        face_pil_img = im.fromarray(rgbimg)
+        face_pil_img = face_pil_img.resize((100,100))
+        byte_io = io.BytesIO()
+        face_pil_img.save(byte_io, 'png')
+        byte_io.seek(0)
+        imgdata = byte_io.getvalue()
         # Save new vector
         new_face = SampleFaces(
             sample_id=sample_id,
@@ -510,6 +562,11 @@ def register_unknown_face(face_vector):
         new_face.vectors.append(
             FeatureVectors(
                 vector=json.dumps(face_vector.tolist())
+            )
+        )
+        new_face.imgdatas.append(
+            FaceImages(
+                imgdata=imgdata
             )
         )
         db_session.add(new_face)
@@ -568,7 +625,7 @@ def calculate_simulation(feat1, feat2):
     return sim
 
 
-def find_face(face_feature_vectors, min_simulation):
+def find_face(base_img, face_feature_vectors, min_simulation):
     """
     Find the closest sample by comparing the feature vectors
     """
@@ -608,7 +665,7 @@ def find_face(face_feature_vectors, min_simulation):
         
         # If not find fit sample, register this face as unkown person in database
         if closest_id == '':
-            res, face_obj = register_unknown_face(face_feature_vector)
+            res, face_obj = register_unknown_face(base_img, face_feature_vector, vector_data['bbox'])
             if res:
                 sample_vectors.append(face_obj)
 
@@ -642,7 +699,7 @@ def process_image(img, min_distance):
     except:
         return FACE_DETECTION_ERR, None
 
-    if len(faces) == 0:
+    if faces is None:
         return NO_FACE_DETECTED_ERR, None
 
     bound_box_map = {}
@@ -701,7 +758,7 @@ def process_image(img, min_distance):
         vector_list.append(f)
 
     # Find candidates by comparing feature vectors between detected face and samples
-    status, candidates = find_face(vector_list, min_distance)
+    status, candidates = find_face(base_img, vector_list, min_distance)
 
     if status != CALC_DISTANCE_OK:
         return status, None

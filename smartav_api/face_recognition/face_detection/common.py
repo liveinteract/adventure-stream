@@ -23,7 +23,7 @@ def set_env(key, value):
         os.system(cmd)
 
 def get_database_url(db_config):
-    return f'postgres+psycopg2://{db_config["username"]}:{db_config["password"]}@{db_config["host"]}:{db_config["port"]}/{db_config["db_name"]}'
+    return f'postgresql://{db_config["username"]}:{db_config["password"]}@{db_config["host"]}:{db_config["port"]}/{db_config["db_name"]}'
 
 def make_database_url_from_env():
     load_dotenv(override=True)
@@ -36,7 +36,7 @@ def make_database_url_from_env():
     if host is None or db_name is None or db_username is None or db_password is None:
         return False
     
-    return f'postgres+psycopg2://{db_username}:{db_password}@{host}:{port}/{db_name}'
+    return f'postgresql://{db_username}:{db_password}@{host}:{port}/{db_name}'
 
 
 def create_database(model_base, db_config):
