@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/gorilla/websocket"
@@ -56,14 +57,17 @@ func SetDecoderCtxParams(w int, h int) {
 var m sync.Mutex
 
 func FaceRecognition(filename string, conn *websocket.Conn, url string, timestamp uint64, m *sync.Mutex) {
+
+	t := time.Now()
 	f, _ := os.Open(filename)
-	defer os.Remove(filename)
-	retStr := ""
+	//defer os.Remove(filename)
+	//retStr := ""
+	faceresult := ""
 	client := &http.Client{}
 	// Read entire JPG into byte slice.
 	reader := bufio.NewReader(f)
 	content, _ := ioutil.ReadAll(reader)
-
+	os.Remove(filename)
 	// Encode as base64.
 	encoded := base64.StdEncoding.EncodeToString(content)
 
@@ -86,14 +90,18 @@ func FaceRecognition(filename string, conn *websocket.Conn, url string, timestam
 			log.Fatal(err)
 		}
 		bodyString := string(bodyBytes)
-		retStr = bodyString
+		faceresult = bodyString
 	}
+	end := time.Now()
+	spendtime := end.Sub(t).Milliseconds()
 
-	res := map[string]interface{}{"track": "face-recognition", "timestamp": int(timestamp), "metadata": retStr, "type": "metadata"}
-	jsonres, _ := json.Marshal(res)
-	log.Println("writing data, timestamp:", timestamp, "\n", string(jsonres))
 	m.Lock()
-	conn.WriteMessage(websocket.TextMessage, []byte(string(jsonres)))
+	if faceresult != "" {
+		res := map[string]interface{}{"track": "face-recognition", "timestamp": int(timestamp + uint64(spendtime)), "metadata": faceresult, "type": "metadata"}
+		writestr, _ := json.Marshal(res)
+		log.Println("writing data, timestamp:", timestamp, "\n", string(writestr))
+		conn.WriteMessage(websocket.TextMessage, []byte(string(writestr)))
+	}
 	m.Unlock()
 }
 
