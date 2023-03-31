@@ -706,6 +706,11 @@ def process_image(img, min_distance):
     face_list = []
     face_feature_vector_list = []
 
+    faces = sorted(faces, key=lambda d: d['det_score'])
+
+    if len(faces) > 3:
+        faces = faces[:3]
+
     # Send request to feature_extraction module
     for i in range(len(faces)):
         face = faces[i]     # [{'bbox': [], 'kps': []}, {'bbox': [], 'kps': []}, ...]
