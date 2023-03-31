@@ -18,7 +18,7 @@ app = Flask(__name__)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Global variables
-QGenerator = main.QGen()
+# QGenerator = main.QGen()
 Models = {
     'image_captioning_model': None,
 }
@@ -356,53 +356,53 @@ def image_captioning_method():
     caption = image_captioning.process_image(Models['image_captioning_model'], img_data['image'])
 
     # Trigger Story Generator
-    last_image_captioning_list.append(caption)
-    if len(last_image_captioning_list) >= call_story_gen_interval and story_generator_is_free:
-        print('call story_generator', len(last_image_captioning_list))
-        th = threading.Thread(target=call_story_generator)
-        th.start()
+    # last_image_captioning_list.append(caption)
+    # if len(last_image_captioning_list) >= call_story_gen_interval and story_generator_is_free:
+    #     print('call story_generator', len(last_image_captioning_list))
+    #     th = threading.Thread(target=call_story_generator)
+    #     th.start()
 
-        # AFter trigger the Story Generator, need to clear this list
-        last_image_captioning_list = []
+    #     # AFter trigger the Story Generator, need to clear this list
+    #     last_image_captioning_list = []
 
-    # Chatterbot
-    chatbot_result = chatbot_main.run_chatterbot(caption, candidate_size)
+    # # Chatterbot
+    # chatbot_result = chatbot_main.run_chatterbot(caption, candidate_size)
 
     # Return candidates
     response = {
         'caption': caption,
-        'text': chatbot_result['text'],
-        'questions': [{'id': quiz.id, 'question': quiz.text, 'options': json.loads(quiz.options)} for quiz in chatbot_result['candidates']]
+        # 'text': chatbot_result['text'],
+        # 'questions': [{'id': quiz.id, 'question': quiz.text, 'options': json.loads(quiz.options)} for quiz in chatbot_result['candidates']]
     }
     
     return make_response(jsonify(response), 200)
 
 
-@app.route('/generate-questions', methods=['POST'])
-def generate_questions():
-    global QGenerator
+# @app.route('/generate-questions', methods=['POST'])
+# def generate_questions():
+#     global QGenerator
 
-    # Load speech content
-    data = request.json
-    if 'content' not in data:
-        response = {
-            'error': ERR_MESSAGES[INVALID_REQUEST_ERR]
-        }
-        return make_response(jsonify(response), 400)
+#     # Load speech content
+#     data = request.json
+#     if 'content' not in data:
+#         response = {
+#             'error': ERR_MESSAGES[INVALID_REQUEST_ERR]
+#         }
+#         return make_response(jsonify(response), 400)
     
-    max_questions = 4
-    if 'max_questions' in data:
-        max_questions = int(data['max_questions'])
+#     max_questions = 4
+#     if 'max_questions' in data:
+#         max_questions = int(data['max_questions'])
 
-    content = data['content']
+#     content = data['content']
 
-    payload = {
-        'input_text': content,
-        'max_questions': max_questions
-    }
-    output = QGenerator.predict_mcq(payload)
+#     payload = {
+#         'input_text': content,
+#         'max_questions': max_questions
+#     }
+#     output = QGenerator.predict_mcq(payload)
 
-    return make_response(jsonify(output), 200)
+#     return make_response(jsonify(output), 200)
 
 
 @app.route('/instance-segmentation/load-model', methods=['POST'])

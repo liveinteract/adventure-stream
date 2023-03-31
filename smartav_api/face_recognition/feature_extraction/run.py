@@ -21,7 +21,7 @@ def load_model():
     global model
 
     # Method-2, load model directly
-    recognition_model_path = os.path.abspath(os.path.join(os.curdir, 'models', 'glint360kr100_model.onnx'))
+    recognition_model_path = os.path.abspath(os.path.join(os.curdir, 'models', 'ms1mv3_arcface_r50_fp16.onnx'))
     model = insightface.model_zoo.get_model(recognition_model_path, providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
     model.prepare(ctx_id=0, input_size=(640, 640))
 

@@ -204,19 +204,19 @@ func FeedPacket(pkt TimedPacket, nodes []string, conn *websocket.Conn, reqFeatur
 	url := ""
 	nodelen := len(nodes)
 
-	if i%5 == 0 {
+	if i%60 == 0 {
 		url = fmt.Sprintf("http://%s:5000/face-recognition", nodes[i%nodelen])
 		go FaceRecognition(filename, conn, url, timestamp, &m)
-	} else if i%30 == 1 {
+	} else if i%30 == 10 {
 		url = fmt.Sprintf("http://%s:5000/image-captioning", nodes[i%nodelen])
 		go ImageCaptioning(filename, conn, url, timestamp, &m)
-	} else if i%10 == 2 {
+	} else if i%12 == 5 {
 		url = fmt.Sprintf("http://%s:5000/instance-segmentation/detect-objects", nodes[i%nodelen])
 		go InstanceSegmentation(filename, conn, url, timestamp, &m)
 	} else {
 		defer os.Remove(filename)
 	}
-	i = (i + 1) % 30
+	i = (i + 1) % 60
 }
 
 func RegisterSamples(registerData *bytes.Buffer) (*http.Response, error) {

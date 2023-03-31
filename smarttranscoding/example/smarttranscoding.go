@@ -19,9 +19,9 @@ import (
 
 var addr = flag.String("addr", "localhost:8080", "http service address")
 
-var nodes = []string{"127.0.0.1", "35.194.58.82", "34.135.170.77"}
+//var nodes = []string{"127.0.0.1", "35.194.58.82", "34.135.170.77"}
 
-// var nodes = []string{"127.0.0.1"}
+var nodes = []string{"127.0.0.1"}
 
 type Client struct {
 	ID   string
