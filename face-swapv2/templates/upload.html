@@ -1,0 +1,143 @@
+<!doctype html>
+<title>Face Swap Demo</title>
+<style type="text/css">
+body {
+    text-align: center;
+}
+form {
+    display: inline-block;
+}
+.center {
+	height:100%;
+	display:flex;
+	align-items:center;
+	justify-content:center;
+  
+ }
+.form-input {
+	width:450px;
+	padding:20px;
+	background:#fff;
+	box-shadow: -3px -3px 7px rgba(94, 104, 121, 0.377),
+				3px 3px 7px rgba(94, 104, 121, 0.377);
+ }
+.form-input video {
+    display:none;
+    max-width:400px;
+    max-height:400px;
+    width: auto;
+    height: 400px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom:10px;
+}
+
+.form-out img {
+    display:block;
+    max-width:400px;
+    max-height:400px;
+    width: auto;
+    height: 400px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom:10px;
+}
+  
+.form-input label {
+    display:block;
+    width:45%;
+    height:45px;
+    margin-left: 25%;
+    line-height:50px;
+    text-align:center;
+    background:#1172c2;
+    color:#fff;
+    font-size:15px;
+    font-family:"Open Sans",sans-serif;
+    text-transform:Uppercase;
+    font-weight:600;
+    border-radius:5px;
+    cursor:pointer;
+}
+.form-input input {
+    display:none;
+}
+</style>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script>
+	function deploy(form) {
+		model = document.getElementById('sel').value;
+	}
+	function showPreview(event){
+        console.log(event);
+
+		if(event.target.files.length > 0){          
+          var targetid = event.target.id;
+          const words = targetid.split('-');
+		  var src = URL.createObjectURL(event.target.files[0]);
+
+          let file = event.target.files[0];
+          let blobURL = URL.createObjectURL(file);
+          /*document.querySelector("video").style.display = 'block';
+          document.querySelector("video").src = blobURL;*/
+
+          let video = document.getElementById('video-preview3');
+          video.style.display = 'block';
+          video.src = blobURL;
+
+          
+		}
+	}
+</script>
+<h2>Select Video file to upload</h2>
+<p>
+	{% with messages = get_flashed_messages() %}
+	  {% if messages %}
+		<ul class=flashes>
+		{% for message in messages %}
+		  <li>{{ message }}</li>
+		{% endfor %}
+		</ul>
+	  {% endif %}
+	{% endwith %}
+</p>
+<form method="post" action="/" enctype="multipart/form-data">
+    <p>
+        <select name="comp_select" id="sel" class="combobox">
+            <option value="face">face</option>
+            <option value="avatar">avatar</option>
+        </select>
+    </p>
+	<div class="center">
+		<div class="form-input">
+			<div class="preview">
+                <!--
+                <video id="video-preview-1" width="320" height="240" controls>
+                    Your browser does not support the video tag.
+                </video>
+                -->
+                <video id="video-preview3" controls v-show="file != ''"/>
+
+			</div>
+			<label for="file-ip-1">Source Video</label>
+			<input type="file" name="source" id="file-ip-1" accept="video/*" onchange="showPreview(event);">
+		</div>
+	</div>
+    <br><br>
+    <div class="center">
+		<input type="submit" value="Convert">
+	</div>
+</form>
+<br><br>
+<h2>Results</h2>
+{% if out_name %}
+    <br>
+    <div class="center">
+        <div class="form-out">
+            <video id="video-preview2" controls />
+                <source src={{ url_for('static', filename=out_name) }} type="video/mp4">
+            <!-- <img src="data:image/jpeg;base64,{{ out_name }}"> -->
+        </div>
+    </div>
+{% endif %}
+
