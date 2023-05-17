@@ -11,7 +11,7 @@ IMAGE_PROCESS_ERR = 101
 INVALID_REQUEST_ERR = 231
 
 app.secret_key = "secret key"
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024
 
 # Get current path
 path = os.getcwd()
