@@ -39,22 +39,27 @@ def allowed_file(filename):
 
 def getmodels():
     models = []
+    defaultmodel = MODEL_NAME
+    models.append(defaultmodel.replace(".dfm", ""))
     for (_, _, file) in os.walk(MODEL_FOLDER):
         for f in file:
-            if '.dfm' in f:
+            if '.dfm' in f and f != MODEL_NAME:
                 models.append(f.replace(".dfm", ""))
+
     return models
 
 
 @app.route('/')
 def upload_form():
-    return render_template('upload.html', out_name = out_name)
+    models = getmodels()
+    return render_template('upload.html', models = models, out_name = out_name)
 
 
 @app.route('/', methods=['POST'])
 def upload_file():
+    global MODEL_FOLDER, MODEL_NAME, swapper
     if request.method == 'POST':
-        type = str(request.form.get('comp_select'))
+        type = str(request.form.get('type_select'))
 
         if 'source' not in request.files:
             flash('No source Video File')
@@ -63,9 +68,17 @@ def upload_file():
         if not os.path.isdir(uploadpath):
             os.mkdir(uploadpath)
 
+        model = str(request.form.get('model_select')) + ".dfm"
+        print(model)
+        if type == "face" and model != MODEL_NAME:
+            MODEL_NAME = model
+            modelpath = os.path.join(MODEL_FOLDER, MODEL_NAME)
+            swapper = DeepFaceCSApp(0, modelpath)
+
         imgsfile = request.files.getlist('source')[0]
         sourcepath = ""
         targetpath = ""
+        filename = ""
         if imgsfile and allowed_file(imgsfile.filename):
             filename = secure_filename(imgsfile.filename)
             sourcepath = os.path.join(uploadpath, filename)
@@ -81,7 +94,8 @@ def upload_file():
         else:
            swapper.convert(sourcepath,targetpath,1)
 
-        return render_template('upload.html', out_name = targetname)
+        models = getmodels()
+        return render_template('upload.html', models = models, out_name = targetname)
     
 if __name__ == "__main__":
     app.run(host='0.0.0.0',port=5555,debug=False)

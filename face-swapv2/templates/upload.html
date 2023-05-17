@@ -103,11 +103,18 @@ form {
 </p>
 <form method="post" action="/" enctype="multipart/form-data">
     <p>
-        <select name="comp_select" id="sel" class="combobox">
+        <select name="type_select" id="seltype" class="combobox">
             <option value="face">face</option>
             <option value="avatar">avatar</option>
         </select>
+
+        <select name="model_select" id="selmodel" class="combobox">
+            {% for model in models:  %}
+	        <option value={{ model }}>{{ model }}</option>
+	        {% endfor %}
+        </select>
     </p>
+
 	<div class="center">
 		<div class="form-input">
 			<div class="preview">
