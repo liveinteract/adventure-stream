@@ -12,6 +12,18 @@ def index(request):
                   })
 
 
+def rtcdemo(request):
+    return render(request, 'interactive_player/index_rtc.html',
+                  {
+                  })
+
+
+def rtcmetatrack(request):
+    return render(request, 'interactive_player/metatrack.html',
+                  {
+                  })
+
+
 def downcount(request):
     remaining_time = 30 - int(time.time() % 30)
     window_id = int(time.time() / 30)
