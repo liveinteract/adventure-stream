@@ -4,39 +4,51 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/woody0105/interactive-video/smarttranscoding/ffmpeg"
+	"github.com/yapingcat/gomedia/go-codec"
+	"github.com/yapingcat/gomedia/go-flv"
+	"github.com/yapingcat/gomedia/go-rtmp"
 )
 
-var addr = flag.String("addr", "localhost:8080", "http service address")
-
 //var nodes = []string{"127.0.0.1", "35.194.58.82", "34.135.170.77"}
-
+var addr = flag.String("addr", "localhost:8001", "http service address")
 var nodes = []string{"127.0.0.1"}
+var isFirstFrame = true
 
-type Client struct {
-	ID   string
-	Conn *websocket.Conn
-}
+//variable for rtmp communication
+var rtmpUrl = flag.String("rtmpurl", "rtmp://127.0.0.1/live/faceswap", "rtmp url to publish")
+var flvname string = ""
+var flvfile *os.File = nil
+var flvmutex sync.Mutex
+
+var rtmpcli *rtmp.RtmpClient = nil
+var rtmpendflag = false
+var packetlen int = 0
+var packetoffsets = []int{}
+var framewidth int = 0
+var frameheight int = 0
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
 }
-
-var clients map[*websocket.Conn]bool
-
-var isFirstFrame = true
 
 func handleconnections1(w http.ResponseWriter, r *http.Request) {
 
@@ -46,12 +58,15 @@ func handleconnections1(w http.ResponseWriter, r *http.Request) {
 	width, _ := strconv.Atoi(sizetmp[0])
 	height, _ := strconv.Atoi(sizetmp[1])
 
+	framewidth = width
+	frameheight = height
+
 	respheader := make(http.Header)
 	initData := r.Header.Get("X-Ws-Init")
 	spsData, _ := base64.StdEncoding.DecodeString(initData)
 
 	// var instances []ffmpeg.Instance
-
+	/*
 	facebuf1, _ := ioutil.ReadFile("example/faces/face1")
 	facebuf2, _ := ioutil.ReadFile("example/faces/face2")
 	facebuf3, _ := ioutil.ReadFile("example/faces/philipp")
@@ -74,6 +89,7 @@ func handleconnections1(w http.ResponseWriter, r *http.Request) {
 		respBody, _ := io.ReadAll(resp.Body)
 		fmt.Println(string(respBody))
 	}
+	*/
 
 	respheader.Add("Sec-WebSocket-Protocol", "videoprocessing.livepeer.com")
 	c, err := upgrader.Upgrade(w, r, respheader)
@@ -109,10 +125,14 @@ func handlemsg1(w http.ResponseWriter, r *http.Request, conn *websocket.Conn, co
 			fmt.Println("sps packet, appending initData", initData)
 			packetdata = append(initData, packetdata...)
 			isFirstFrame = false
+			if rtmpendflag {
+				go startrtmpClient()
+			}
 		}
 
 		timedpacket := ffmpeg.TimedPacket{Timestamp: timestamp, Packetdata: ffmpeg.APacket{Data: packetdata, Length: len(packetdata)}}
-		ffmpeg.FeedPacket(timedpacket, nodes, conn, nodes)
+		ffmpeg.FeedPacket(timedpacket, nodes, conn, nodes, initData)
+		ProcessingFswap(timedpacket, initData)
 	}
 }
 
@@ -121,10 +141,167 @@ func startServer1() {
 	http.HandleFunc("/segmentation", handleconnections1)
 }
 
+// part of RTMP communication
+type SwapRes struct {
+	Respath string `json:"respath"`
+}
+
+func callpushrtmp(fileName string, packetStr string) {
+	client := &http.Client{}
+	//nodelen := len(nodes)
+	url := fmt.Sprintf("http://%s:5555/faceswap", nodes[0])
+	metadata := fmt.Sprintf(`{"filepath": "%s", "pktinfo": "%s", "w": "%d", "h": "%d"}`,
+		fileName, packetStr, framewidth, frameheight)
+
+	log.Println("push json:", metadata)
+
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer([]byte(metadata)))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		var res SwapRes
+		err = json.Unmarshal(bodyBytes, &res)
+		if err == nil {
+			log.Println("return json:", res.Respath)
+		}
+
+	} else {
+		log.Printf("url: %s\n status code %d", url, resp.StatusCode)
+	}
+
+	flvmutex.Lock()
+	pushrtmp(fileName, rtmpcli)
+	flvmutex.Unlock()
+	//os.Remove(fileName)
+}
+func pushrtmp(fileName string, cli *rtmp.RtmpClient) {
+	if cli == nil {
+		log.Println("cli - not nil point")
+		return
+	}
+
+	f := flv.CreateFlvReader()
+	f.OnFrame = func(cid codec.CodecID, frame []byte, pts, dts uint32) {
+		if cid == codec.CODECID_VIDEO_H264 {
+			cli.WriteVideo(cid, frame, pts, dts)
+			time.Sleep(time.Millisecond * 5)
+		} else if cid == codec.CODECID_AUDIO_AAC {
+			cli.WriteAudio(cid, frame, pts, dts)
+		}
+	}
+	fd, _ := os.Open(fileName)
+	//defer fd.Close()
+	cache := make([]byte, 8182)
+	for {
+		n, err := fd.Read(cache)
+		if err != nil {
+			fmt.Println(err)
+			break
+		}
+		f.Input(cache[0:n])
+	}
+	fd.Close()
+
+	log.Println("end - Flv pushrtmp")
+}
+func ProcessingFswap(pkt ffmpeg.TimedPacket, initData []byte) {
+	// if starting
+	data := pkt.Packetdata.Data
+	if packetlen == 0 && flvfile == nil {
+		unixMilli := time.Now().UnixNano() / 1e6
+		flvname = strconv.Itoa(int(unixMilli)) + ".data"
+
+		path, _ := os.Getwd()
+		flvname = filepath.Join(path, flvname)
+		fmt.Println(flvname)
+
+		flvfile, _ = os.OpenFile(flvname, os.O_CREATE|os.O_RDWR, 0666)
+	}
+
+	flvfile.Write(data)
+	packetlen += len(data)
+	packetoffsets = append(packetoffsets, len(data))
+
+	//if packetlen > 50000 {
+	if packetlen > 90000 {
+		log.Println("call - Flv Close", packetlen)
+		flvfile.Close()
+		flvfile = nil
+		packetlen = 0
+		packetStr := ""
+		for _, str := range packetoffsets {
+			packetStr += (strconv.Itoa(str) + ",")
+		}
+		packetoffsets = nil
+
+		go callpushrtmp(flvname, packetStr)
+	}
+}
+func startrtmpClient() {
+	rtmpendflag = false
+	u, err := url.Parse(*rtmpUrl)
+	if err != nil {
+		panic(err)
+	}
+	host := u.Host
+	if u.Port() == "" {
+		host += ":1935"
+	}
+	//connect to remote rtmp server
+	connect, err := net.Dial("tcp4", host)
+	if err != nil {
+		fmt.Println("connect failed", err)
+		return
+	}
+
+	isReady := make(chan struct{})
+
+	//create rtmp client
+	rtmpcli = rtmp.NewRtmpClient(rtmp.WithComplexHandshake(), rtmp.WithEnablePublish())
+
+	//monotoring status ,STATE_RTMP_PUBLISH_START mean ready to receive
+	rtmpcli.OnStateChange(func(newState rtmp.RtmpState) {
+		if newState == rtmp.STATE_RTMP_PUBLISH_START {
+			fmt.Println("ready for publish")
+			close(isReady)
+		}
+	})
+
+	rtmpcli.SetOutput(func(data []byte) error {
+		_, err := connect.Write(data)
+		return err
+	})
+
+	fmt.Println("rtmpcli start")
+	rtmpcli.Start(*rtmpUrl)
+	buf := make([]byte, 4096)
+	n := 0
+	for err == nil {
+		n, err = connect.Read(buf)
+		fmt.Println("rtmpcli read data")
+		if err != nil {
+			continue
+		}
+		rtmpcli.Input(buf[:n])
+	}
+	fmt.Println(err)
+	fmt.Println("Ending rtmpcli")
+	rtmpendflag = true
+}
 func main() {
 	flag.Parse()
 	log.SetFlags(0)
 	ffmpeg.DecoderInit()
+	go startrtmpClient()
 	startServer1()
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }

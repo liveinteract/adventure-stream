@@ -5,8 +5,8 @@ from apps.DeepFaceLive.DeepFaceCSApp import DeepFaceCSApp
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--source", default="Obama.mp4", help="source face file path")
-    parser.add_argument("--target", default="Obama_test.mp4", help="output video file path")
+    parser.add_argument("--source", default="test.flv", help="source face file path")
+    parser.add_argument("--target", default="out_test.flv", help="output video file path")
     parser.add_argument("--modelpath", default="models/Jackie_Chan.dfm", help="one to one swap model path")
     parser.add_argument("--swaptype", default = 0, type = int, help="swaptype - 0:face, 1:punkavatar")
     gpuid = 0

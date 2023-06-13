@@ -20,7 +20,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// #cgo pkg-config: libavformat libavfilter libavcodec libavutil libswscale gnutls
+// #cgo pkg-config: libavformat libavfilter libavcodec libavutil libswscale
 // #include <stdlib.h>
 // #include "lpms_ffmpeg.h"
 import "C"

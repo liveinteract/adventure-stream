@@ -32,6 +32,14 @@ modelpath = os.path.join(MODEL_FOLDER, MODEL_NAME)
 swapper = DeepFaceCSApp(0, modelpath)
 uploadpath = UPLOAD_FOLDER
 
+# run cnn filter to speed up processing time
+swapper.convert("test.flv","test.flv_swapped1.flv",0, 2)
+swapper.convertbypacket("test.data", 1280, 720, "65291,8041,3338,3114,11556,", "test.flv_swapped.flv", 0, 2)
+
+#for decoding
+framewidth = 1920
+frameheight = 1080
+
 out_name = ""
 
 def allowed_file(filename):
@@ -54,6 +62,33 @@ def upload_form():
     models = getmodels()
     return render_template('upload.html', models = models, out_name = out_name)
 
+@app.route('/faceswap', methods=['POST'])
+def faceswapbypath():
+    payloads = request.json
+    if 'filepath' not in payloads or 'pktinfo' not in payloads:
+        response = {
+            'error': '"filepath" is missing in the request.'
+        }
+        return make_response(jsonify(response), 400)
+
+    srcpath = payloads['filepath']
+    pktinfo = payloads['pktinfo']
+    framewdith = int(payloads['w'])
+    framwheight = int(payloads['h'])
+    dstpath = srcpath + "_swapped.flv"
+    print(srcpath, dstpath, pktinfo)
+    
+    #res = swapper.convert(srcpath,dstpath,0,2)
+    res = swapper.convertbypacket(srcpath, framewdith, framwheight, pktinfo, dstpath, 0, 2)
+
+    if res == True:
+        statuscode = 200
+    else:
+        statuscode = 400
+    response = {
+            'respath': f'"{dstpath}"'
+        }
+    return make_response(jsonify(response), statuscode)
 
 @app.route('/', methods=['POST'])
 def upload_file():

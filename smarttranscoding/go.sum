@@ -1,2 +1,4 @@
 github.com/gorilla/websocket v1.4.2 h1:+/TMaTYc4QFitKJxsQ7Yye35DkWvkdLcvGKqM+x0Ufc=
 github.com/gorilla/websocket v1.4.2/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
+github.com/yapingcat/gomedia v0.0.0-20230605024426-a577bb3325d4 h1:Mamg6fQqu0bWfXk4QhwlA+z8X7eyd/FGlrW4AqnWItU=
+github.com/yapingcat/gomedia v0.0.0-20230605024426-a577bb3325d4/go.mod h1:WSZ59bidJOO40JSJmLqlkBJrjZCtjbKKkygEMfzY/kc=
