@@ -2,6 +2,7 @@ import os
 from flask import Flask, flash, request, redirect, render_template, send_from_directory, Response, jsonify, make_response
 from werkzeug.utils import secure_filename
 from apps.DeepFaceLive.DeepFaceCSApp import DeepFaceCSApp
+import threading
 
 app=Flask(__name__, template_folder='templates', static_folder='videodata')
 
@@ -33,9 +34,9 @@ swapper = DeepFaceCSApp(0, modelpath)
 uploadpath = UPLOAD_FOLDER
 
 # run cnn filter to speed up processing time
-swapper.convert("test.flv","test.flv_swapped1.flv",0, 2)
-swapper.convertbypacket("test.data", 1280, 720, "65291,8041,3338,3114,11556,", "test.flv_swapped.flv", 0, 2)
-
+#swapper.convert("test.flv","test.flv_swapped1.flv",0, 2)
+swapper.convertbypacket("test.data", 1280, 720, "65291,8041,3338,3114,11556,", "test.flv_swapped.flv", 0, 1)
+os.remove("test.flv_swapped.flv")
 #for decoding
 framewidth = 1920
 frameheight = 1080
@@ -64,6 +65,7 @@ def upload_form():
 
 @app.route('/faceswap', methods=['POST'])
 def faceswapbypath():
+    global swaplock
     payloads = request.json
     if 'filepath' not in payloads or 'pktinfo' not in payloads:
         response = {
@@ -78,15 +80,15 @@ def faceswapbypath():
     dstpath = srcpath + "_swapped.flv"
     print(srcpath, dstpath, pktinfo)
     
-    #res = swapper.convert(srcpath,dstpath,0,2)
-    res = swapper.convertbypacket(srcpath, framewdith, framwheight, pktinfo, dstpath, 0, 2)
+    #res = swapper.convert(srcpath,dstpath,0,2)    
+    res, strpath = swapper.convertpacket(srcpath, framewdith, framwheight, pktinfo, dstpath, 0, 2)
 
     if res == True:
         statuscode = 200
     else:
         statuscode = 400
     response = {
-            'respath': f'"{dstpath}"'
+            'respath': f'{strpath}'
         }
     return make_response(jsonify(response), statuscode)
 

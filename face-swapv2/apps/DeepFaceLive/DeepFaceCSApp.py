@@ -16,7 +16,12 @@ from xlib import avecl as lib_cl
 import multiprocessing
 
 import ctypes
-declib = ctypes.cdll.LoadLibrary("./fvdecoder.so")
+from PIL import Image
+
+declib = ctypes.cdll.LoadLibrary("./vfdecoder.so")
+frameidx = 0
+frameW = 640
+frameH = 360
 
 def initdecoder():
     declib.init_decoder()
@@ -25,16 +30,27 @@ def closedecoder():
     declib.close_decoder()
 
 def decodeframe(pkdata, lenght, width, height):
-    outbuffer = "\0" * width * height * 4
-    res = declib.decode_frame(pkdata, lenght, width, height, outbuffer)
-    npArray = np.array(outbuffer)
-    bgrImage = npArray.reshape(height, width, 3)
+
+    res = 0
+    #bgrImage = cv2.imread("sample.jpg")
+       
+    global frameidx, frameW, frameH    
+    outbuffer = "\0" * frameW * frameH * 3
+    bytebuffer = bytes(outbuffer, 'ascii')
+    img_stride = (frameW * 24 + 31) // 32 * 4    
+    res = declib.decode_frame(pkdata, lenght, width, height, bytebuffer)
+    npArray = np.frombuffer(bytebuffer, np.uint8)
+    bgrImage = np.lib.stride_tricks.as_strided(npArray, (frameH, frameW, 3), (img_stride, 3, 1))
+    
+    #frameidx = frameidx + 1
+    #if frameidx > 0:       
+    #    filename = f'{frameidx:06}' + ".jpg"
+    #    cv2.imwrite(filename, bgrImage)
 
     if res == 0:
         return True, bgrImage
     else:
         return False, bgrImage
-  
 
 class DeepFaceCSApp:
     def __init__(self, gpuid, modelpath):
@@ -47,11 +63,20 @@ class DeepFaceCSApp:
         
         cldevlist = lib_cl.get_available_devices_info()
         dev = lib_cl.get_device(cldevlist[gpuid])
-        dev.set_target_memory_usage(mb=512)
+        dev.set_target_memory_usage(mb=1024)
         lib_cl.set_default_device(dev)
-
         self.max_faces = 1
+        self.avatarpng = self.getavatar()
+
+        self.framecount = 0
+        self.swappedcount = 0
+        self.frameW = 640
+        self.frameH = 360
+        self.vwriter = None
+        self.destpath = ""
         initdecoder()
+
+        self.lock = threading.Lock()
 
     def __del__(self):
         closedecoder()
@@ -245,25 +270,19 @@ class DeepFaceCSApp:
                 pktinfo.append(int(str))
         return pktinfo
     
-    def convertbypacket(self, sourcepath, width, height, pktinfo, targetpath, swaptype, reffps = 1):
-        
-        #get avatar image
-        if swaptype > 0:
-            print('convert type:', swaptype)
-            avatarpng = self.getavatar()
-            
+    def convertbypacket(self, sourcepath, width, height, pktinfo, targetpath, swaptype, reffps = 1):        
         #set detect status
         vreader = open(sourcepath,"rb")
-        fps = 24 / reffps
-        vwriter= cv2.VideoWriter(targetpath, cv2.VideoWriter_fourcc(*'H264'), fps, (width, height))        
+        fps = 20 / reffps
+        print("fource:", cv2.VideoWriter_fourcc(*'H264'))
+        vwriter= cv2.VideoWriter(targetpath, cv2.VideoWriter_fourcc(*'H264'), fps, (self.frameW, self.frameH))        
         #for debug
         frameidx = 1
         face_resolution = 224
         pktreadlen = self.str2intinfo(pktinfo)
         try:
             for l in pktreadlen:
-                data = vreader.read(l)
-                print(l, len(data))
+                data = vreader.read(l)                
                 ret, frame_image = decodeframe(data, l, width, height)
                 if ret == True:
                     if reffps > 1 and frameidx % reffps == 0:
@@ -281,7 +300,7 @@ class DeepFaceCSApp:
                     
                     if len(rects) != 0:
                         if swaptype > 0:
-                            merged_frame = self.swapavatar(frame_image, rects, avatarpng)
+                            merged_frame = self.swapavatar(frame_image, rects, self.avatarpng)
                         else:
                             if self.max_faces != 0 and len(rects) > self.max_faces:
                                 rects = rects[:self.max_faces]
@@ -293,9 +312,69 @@ class DeepFaceCSApp:
                     vwriter.write(merged_frame)
                 #else:
                 #    break
-
         finally:
             vreader.close()
             vwriter.release()
 
         return True
+
+    def convertpacket(self, sourcepath, width, height, pktinfo, targetpath, swaptype, reffps = 1):
+                
+            #set detect status
+            vreader = open(sourcepath,"rb")
+            if vreader is None:
+                return False, ""
+            lock = self.lock
+            lock.acquire()
+            runinterval = 2
+            if  self.vwriter == None and self.swappedcount == 0:
+                self.vwriter = cv2.VideoWriter(targetpath, cv2.VideoWriter_fourcc(*'H264'), 14, (self.frameW, self.frameH))
+                self.destpath = targetpath
+            
+            #for debug            
+            face_resolution = 224
+            pktreadlen = self.str2intinfo(pktinfo)
+            try:
+                for l in pktreadlen:
+                    data = vreader.read(l)                    
+                    ret, frame_image = decodeframe(data, l, width, height)
+                    if ret == True:
+                        if runinterval > 1 and self.framecount % runinterval != 0:
+                            self.framecount += 1
+                            continue
+                        # detect face
+                        rects = []
+
+                        _,H,W,_ = ImageProcessor(frame_image).get_dims()
+                        rects = self.faceDetector.extract(frame_image, 0.5, 480)[0]
+                        rects = [ FRect.from_ltrb( (l/W, t/H, r/W, b/H) ) for l,t,r,b in rects ]
+                        rects = FRect.sort_by_area_size(rects)
+
+                        merged_frame = frame_image
+                        
+                        if len(rects) != 0:
+                            if swaptype > 0:
+                                merged_frame = self.swapavatar(frame_image, rects, self.avatarpng)
+                            else:
+                                if self.max_faces != 0 and len(rects) > self.max_faces:
+                                    rects = rects[:self.max_faces]
+
+                                merged_frame = self.swapface(frame_image, rects, face_resolution)                        
+
+                            self.framecount += 1
+                        if self.vwriter is not None:
+                            self.swappedcount += 1
+                            self.vwriter.write(merged_frame)
+                    #else:
+                    #    break
+            finally:
+                vreader.close()
+            srtpath = ""
+            if self.swappedcount > 10:
+                self.vwriter.release()
+                self.vwriter = None                
+                self.swappedcount = 0
+                srtpath = self.destpath
+            lock.release()
+
+            return True, srtpath

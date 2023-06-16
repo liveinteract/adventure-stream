@@ -18,4 +18,6 @@ $(TARGET): $(OBJECTS)
     $(CC) $(FLAGS) $(CFLAGS) $(LDFLAGS) -o $(TARGET) $(OBJECTS)
 
 gcc -c -Wall -fpic -I ~/compiled/include vfdecoder.c
-gcc -shared -L ~/compiled/lib -o fvdecoder.so vfdecoder.o -lavformat -lavfilter -lavcodec -lavutil -lswscale
+gcc -shared -L ~/compiled/lib -o vfdecoder.so vfdecoder.o -lavformat -lavfilter -lavcodec -lavutil -lswscale
+gcc -o vfencoder ./vfencoder.c -I ~/compiled/include  -L ~/compiled/lib -lavformat -lavfilter -lavcodec -lavutil -lswscale -lavdevice -lswresample
+
