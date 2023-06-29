@@ -165,7 +165,8 @@ class DeepFaceCSApp:
             return merged_frame
     
     def swapavatar(self, frame_image, rects, avatarpng):
-        merged_frame = frame_image 
+        merged_frame = frame_image
+        _,H,W,_ = ImageProcessor(frame_image).get_dims()
         for face_id, face_urect in enumerate(rects):
             face_image, face_uni_mat = face_urect.cut(frame_image, 1.4, 192)
             _,fH,fW,_ = ImageProcessor(face_image).get_dims()
